@@ -1,0 +1,6 @@
+torch==2.5.1 # pyTourch famework ; build U-Net ; train model ; GPU support ; compute loss and gradients
+torchaudio==2.5.1 # PyTorch Audio processing library ; load audio files ; compute STFT and ISTFT
+tqdm # Progress bar for training
+matplotlib # spectrogram drawing
+numpy # mathematical operations
+soundfile # reading writing audio files
