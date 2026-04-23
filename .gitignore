@@ -1,0 +1,8 @@
+__pycache__/
+*.wav
+*.pth
+.DS_Store
+test_audio/
+unet-old/
+deep-Unet/
+dataset/
