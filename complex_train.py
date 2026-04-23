@@ -14,11 +14,11 @@ from complex_data_prep import get_dataloaders
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 SAVE_DIR = "./complex_checkpoints"
 
-DATA_BASE = "/ceph/home/student.aau.dk/gr27bw/P8-AVS-WNS/mini-project-unet4/datasets_fullband"
-CLEAN_DIR = os.path.join(DATA_BASE, "clean_fullband")
-NOISE_DIR = os.path.join(DATA_BASE, "noise_fullband")
+DATA_BASE = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/RESAMPLED/segmented"
+CLEAN_DIR = os.path.join(DATA_BASE, "clean")
+NOISY_DIR = os.path.join(DATA_BASE, "noisy")
 
-BATCH_SIZE = 16
+BATCH_SIZE = 8
 NUM_EPOCHS = 120 
 # LEARNING_RATE = 2e-4
 LEARNING_RATE = 5e-5 # Lowered for final precision fine-tuning
@@ -32,18 +32,19 @@ class wSDRLoss(nn.Module):
     # when call criterion(a,b,c,d,e,f) it will call this function
 
     # this recieve 6 tensors the real imag part of the mix, clean and predicted spectrograms
-    def forward(self, mix_real, mix_imag, clean_real, clean_imag, pred_real, pred_imag):
-        self.istft = self.istft.to(mix_real.device)
-        mix_complex = torch.complex(mix_real, mix_imag) 
+    def forward(self, noisy_real, noisy_imag, clean_real, clean_imag, pred_real, pred_imag):
+        self.istft = self.istft.to(noisy_real.device)
+        
+        noisy_complex = torch.complex(noisy_real, noisy_imag) 
         clean_complex = torch.complex(clean_real, clean_imag) 
         pred_complex = torch.complex(pred_real, pred_imag) 
         
-        mix_wav = self.istft(mix_complex)
+        noisy_wav = self.istft(noisy_complex)
         clean_wav = self.istft(clean_complex)
         pred_wav = self.istft(pred_complex)
         
-        noise_wav = mix_wav - clean_wav
-        pred_noise_wav = mix_wav - pred_wav # pred_noise_wav IS NEARLY ZERO if the model removed the noise ; no noise it left
+        noise_wav = noisy_wav - clean_wav
+        pred_noise_wav = noisy_wav - pred_wav # pred_noise_wav IS NEARLY ZERO if the model removed the noise ; no noise it left
         
 
         clean_wav = clean_wav.flatten(1)
@@ -71,10 +72,10 @@ class wSDRLoss(nn.Module):
         
         loss = - (alpha * s_target + (1 - alpha) * n_target)
         
-        # 🧪 FINAL SHIELD: Filter out any NaNs that managed to break through
+        # FINAL SHIELD: Filter out any NaNs that managed to break through
         loss = loss[~torch.isnan(loss)]
         if loss.numel() == 0:
-            return torch.tensor(0.0, device=mix_real.device, requires_grad=True)
+            return torch.tensor(0.0, device=noisy_real.device, requires_grad=True)
             
         return torch.mean(loss)
 
@@ -82,7 +83,9 @@ def train_one_epoch(model, dataloader, optimizer, criterion, epoch):
     model.train() # tell pytorch we are in training mode now ;turn on batchnorm and dropout(well we are not using dropout)
     running_loss = 0.0 # initialise the running loss ; this is used to track average loss over the epoch
     loop = tqdm(dataloader, total=len(dataloader), leave=False)
+
     for mix_real, mix_imag, clean_real, clean_imag in loop:
+        
         mix_real, mix_imag = mix_real.to(DEVICE), mix_imag.to(DEVICE)
         clean_real, clean_imag = clean_real.to(DEVICE), clean_imag.to(DEVICE)
         
@@ -133,7 +136,7 @@ def save_checkpoint(model, optimizer, scheduler, epoch, best_val_loss, filename)
     torch.save(checkpoint, filename)
 
 def main():
-    print(f"DNS TRAINING: Using full dataset from: {DATA_BASE}")
+    print(f"TRAINING: Using full dataset from: {DATA_BASE}")
     os.makedirs(SAVE_DIR, exist_ok=True)
     start_epoch = 0
     checkpoint_path = None
@@ -168,7 +171,7 @@ def main():
         for param_group in optimizer.param_groups:
             param_group['lr'] = LEARNING_RATE
 
-    train_loader, val_loader = get_dataloaders(CLEAN_DIR, NOISE_DIR, RIR_DIR, batch_size=BATCH_SIZE)
+    train_loader, val_loader = get_dataloaders(CLEAN_DIR, NOISY_DIR, batch_size=BATCH_SIZE)
     
     log_file = os.path.join(SAVE_DIR, "training_log.csv")
     if not os.path.exists(log_file) and start_epoch == 0:
@@ -176,8 +179,10 @@ def main():
             writer = csv.writer(f)
             writer.writerow(["Epoch", "Train_wSDR_Loss", "Val_wSDR_Loss"])
     for epoch in range(start_epoch, NUM_EPOCHS):
+        print(start_epoch)
         current_lr = optimizer.param_groups[0]['lr']
         print(f"\n[Epoch {epoch+1}/120] Current Learning Rate: {current_lr:.2e}")
+        print(f"Train batches: {len(train_loader)} | Val batches: {len(val_loader)}")
         avg_loss = train_one_epoch(model, train_loader, optimizer, criterion, epoch)
         val_loss = validate_one_epoch(model, val_loader, criterion)
         print(f"Epoch [{epoch+1}/{NUM_EPOCHS}] wSDR Train: {avg_loss:.4f} | Val: {val_loss:.4f}")
