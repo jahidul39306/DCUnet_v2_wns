@@ -21,7 +21,7 @@ CLEAN_DIR = os.path.join(DATA_BASE, "clean")
 NOISY_DIR = os.path.join(DATA_BASE, "noisy")
 
 BATCH_SIZE = 16
-NUM_EPOCHS = 30 
+NUM_EPOCHS = 60 
 # LEARNING_RATE = 2e-4
 LEARNING_RATE = 5e-5 # Lowered for final precision fine-tuning
 # loss function from the original paper
