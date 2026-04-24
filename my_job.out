@@ -1,0 +1,15 @@
+TRAINING: Using full dataset from: /ceph/home/student.aau.dk/cg44he/DCUnet_v2_wns/dataset
+Resuming from checkpoint: ./complex_checkpoints/latest_checkpoint.pth
+
+[Epoch 8/30] Current Learning Rate: 5.00e-05
+Train batches: 636 | Val batches: 71
+Epoch [8/30] wSDR Train: -8.1084 | Val: -8.2293
+New best model saved with val_loss: -8.2293
+
+[Epoch 9/30] Current Learning Rate: 5.00e-05
+Train batches: 636 | Val batches: 71
+Epoch [9/30] wSDR Train: -8.2644 | Val: -8.2645
+New best model saved with val_loss: -8.2645
+
+[Epoch 10/30] Current Learning Rate: 5.00e-05
+Train batches: 636 | Val batches: 71
