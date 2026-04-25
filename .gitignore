@@ -6,3 +6,5 @@ test_audio/
 unet-old/
 deep-Unet/
 dataset/
+my_job.out
+my_job.err
