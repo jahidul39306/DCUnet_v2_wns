@@ -162,7 +162,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     criterion = wSDRLoss()
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3, factor=0.5)
-    # reduce lerning rate when validation loss stop improve ; verbose  = true make it print when it reduce; its not working in the pytourch version 
+    # reduce lerning rate when validation loss stop improve ; verbose  = true make it print when it reduce; its not working in the pytorch version 
 
     if checkpoint_path:
         print(f"Resuming from checkpoint: {checkpoint_path}")
@@ -206,11 +206,6 @@ def main():
         # 1. Save "latest" for every single epoch (Safety snapshot)
         latest_save_path = os.path.join(SAVE_DIR, "latest_checkpoint.pth")
         save_checkpoint(model, optimizer, scheduler, epoch, val_loss, latest_save_path)
-        # 2. Save archival checkpoints every 10 epochs (History)
-        if (epoch + 1) % 10 == 0:
-            archive_path = os.path.join(SAVE_DIR, f"dcunet_epoch_{epoch+1}.pth")
-            save_checkpoint(model, optimizer, scheduler, epoch, val_loss, archive_path)
-            print(f"Archive checkpoint saved: {archive_path}")
-
+        
 if __name__ == "__main__":
     main()
