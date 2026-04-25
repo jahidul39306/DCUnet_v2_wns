@@ -1,111 +1,136 @@
 TRAINING: Using full dataset from: /ceph/home/student.aau.dk/cg44he/DCUnet_v2_wns/dataset
 Resuming from checkpoint: ./complex_checkpoints/latest_checkpoint.pth
 
-[Epoch 8/30] Current Learning Rate: 5.00e-05
+[Epoch 31/60] Current Learning Rate: 2.00e-04
 Train batches: 636 | Val batches: 71
-Epoch [8/30] wSDR Train: -8.1084 | Val: -8.2293
-New best model saved with val_loss: -8.2293
+Epoch [31/60] wSDR Train: -7.9247 | Val: -3.4955
 
-[Epoch 9/30] Current Learning Rate: 5.00e-05
+[Epoch 32/60] Current Learning Rate: 2.00e-04
 Train batches: 636 | Val batches: 71
-Epoch [9/30] wSDR Train: -8.2644 | Val: -8.2645
-New best model saved with val_loss: -8.2645
+Epoch [32/60] wSDR Train: -8.3727 | Val: -8.4368
 
-[Epoch 10/30] Current Learning Rate: 5.00e-05
+[Epoch 33/60] Current Learning Rate: 2.00e-04
 Train batches: 636 | Val batches: 71
-Epoch [10/30] wSDR Train: -8.4006 | Val: -8.3290
-New best model saved with val_loss: -8.3290
-Archive checkpoint saved: ./complex_checkpoints/dcunet_epoch_10.pth
+Epoch [33/60] wSDR Train: -8.6335 | Val: -8.6153
 
-[Epoch 11/30] Current Learning Rate: 5.00e-05
+[Epoch 34/60] Current Learning Rate: 2.00e-04
 Train batches: 636 | Val batches: 71
-Epoch [11/30] wSDR Train: -8.4736 | Val: -8.4822
-New best model saved with val_loss: -8.4822
+Epoch [34/60] wSDR Train: -8.7240 | Val: -8.3631
 
-[Epoch 12/30] Current Learning Rate: 5.00e-05
+[Epoch 35/60] Current Learning Rate: 1.00e-04
 Train batches: 636 | Val batches: 71
-Epoch [12/30] wSDR Train: -8.5995 | Val: -8.3688
+Epoch [35/60] wSDR Train: -9.0342 | Val: -9.1123
+New best model saved with val_loss: -9.1123
 
-[Epoch 13/30] Current Learning Rate: 5.00e-05
+[Epoch 36/60] Current Learning Rate: 1.00e-04
 Train batches: 636 | Val batches: 71
-Epoch [13/30] wSDR Train: -8.6582 | Val: -8.5488
-New best model saved with val_loss: -8.5488
+Epoch [36/60] wSDR Train: -9.1385 | Val: -9.1749
+New best model saved with val_loss: -9.1749
 
-[Epoch 14/30] Current Learning Rate: 5.00e-05
+[Epoch 37/60] Current Learning Rate: 1.00e-04
 Train batches: 636 | Val batches: 71
-Epoch [14/30] wSDR Train: -8.7413 | Val: -8.5757
-New best model saved with val_loss: -8.5757
+Epoch [37/60] wSDR Train: -9.1680 | Val: -8.3481
 
-[Epoch 15/30] Current Learning Rate: 5.00e-05
+[Epoch 38/60] Current Learning Rate: 1.00e-04
 Train batches: 636 | Val batches: 71
-Epoch [15/30] wSDR Train: -8.8018 | Val: -8.6223
-New best model saved with val_loss: -8.6223
+Epoch [38/60] wSDR Train: -9.2001 | Val: -9.2162
+New best model saved with val_loss: -9.2162
 
-[Epoch 16/30] Current Learning Rate: 5.00e-05
+[Epoch 39/60] Current Learning Rate: 1.00e-04
 Train batches: 636 | Val batches: 71
-Epoch [16/30] wSDR Train: -8.8349 | Val: -8.5439
+Epoch [39/60] wSDR Train: -9.2309 | Val: -9.2283
+New best model saved with val_loss: -9.2283
 
-[Epoch 17/30] Current Learning Rate: 5.00e-05
+[Epoch 40/60] Current Learning Rate: 1.00e-04
 Train batches: 636 | Val batches: 71
-Epoch [17/30] wSDR Train: -8.8869 | Val: -8.6121
+Epoch [40/60] wSDR Train: -9.2332 | Val: -9.1435
+Archive checkpoint saved: ./complex_checkpoints/dcunet_epoch_40.pth
 
-[Epoch 18/30] Current Learning Rate: 5.00e-05
+[Epoch 41/60] Current Learning Rate: 1.00e-04
 Train batches: 636 | Val batches: 71
-Epoch [18/30] wSDR Train: -8.9099 | Val: -8.5330
+Epoch [41/60] wSDR Train: -9.2690 | Val: -9.2653
+New best model saved with val_loss: -9.2653
 
-[Epoch 19/30] Current Learning Rate: 5.00e-05
+[Epoch 42/60] Current Learning Rate: 1.00e-04
 Train batches: 636 | Val batches: 71
-Epoch [19/30] wSDR Train: -8.9587 | Val: -8.6722
-New best model saved with val_loss: -8.6722
+Epoch [42/60] wSDR Train: -9.2852 | Val: -9.3040
+New best model saved with val_loss: -9.3040
 
-[Epoch 20/30] Current Learning Rate: 5.00e-05
+[Epoch 43/60] Current Learning Rate: 1.00e-04
 Train batches: 636 | Val batches: 71
-Epoch [20/30] wSDR Train: -8.9840 | Val: -8.6954
-New best model saved with val_loss: -8.6954
-Archive checkpoint saved: ./complex_checkpoints/dcunet_epoch_20.pth
+Epoch [43/60] wSDR Train: -9.3131 | Val: -9.1155
 
-[Epoch 21/30] Current Learning Rate: 5.00e-05
+[Epoch 44/60] Current Learning Rate: 1.00e-04
 Train batches: 636 | Val batches: 71
-Epoch [21/30] wSDR Train: -9.0281 | Val: -8.6878
+Epoch [44/60] wSDR Train: -9.2965 | Val: -9.1527
 
-[Epoch 22/30] Current Learning Rate: 5.00e-05
+[Epoch 45/60] Current Learning Rate: 1.00e-04
 Train batches: 636 | Val batches: 71
-Epoch [22/30] wSDR Train: -9.0366 | Val: -8.7686
-New best model saved with val_loss: -8.7686
+Epoch [45/60] wSDR Train: -9.2483 | Val: -9.1869
 
-[Epoch 23/30] Current Learning Rate: 5.00e-05
+[Epoch 46/60] Current Learning Rate: 1.00e-04
 Train batches: 636 | Val batches: 71
-Epoch [23/30] wSDR Train: -9.1066 | Val: -8.8469
-New best model saved with val_loss: -8.8469
+Epoch [46/60] wSDR Train: -9.3445 | Val: -9.2798
 
-[Epoch 24/30] Current Learning Rate: 5.00e-05
+[Epoch 47/60] Current Learning Rate: 5.00e-05
 Train batches: 636 | Val batches: 71
-Epoch [24/30] wSDR Train: -9.1155 | Val: -8.7024
+Epoch [47/60] wSDR Train: -9.3961 | Val: -9.4287
+New best model saved with val_loss: -9.4287
 
-[Epoch 25/30] Current Learning Rate: 5.00e-05
+[Epoch 48/60] Current Learning Rate: 5.00e-05
 Train batches: 636 | Val batches: 71
-Epoch [25/30] wSDR Train: -9.1252 | Val: -8.9094
-New best model saved with val_loss: -8.9094
+Epoch [48/60] wSDR Train: -9.4055 | Val: -9.4399
+New best model saved with val_loss: -9.4399
 
-[Epoch 26/30] Current Learning Rate: 5.00e-05
+[Epoch 49/60] Current Learning Rate: 5.00e-05
 Train batches: 636 | Val batches: 71
-Epoch [26/30] wSDR Train: -9.1263 | Val: -8.8262
+Epoch [49/60] wSDR Train: -9.4148 | Val: -9.4314
 
-[Epoch 27/30] Current Learning Rate: 5.00e-05
+[Epoch 50/60] Current Learning Rate: 5.00e-05
 Train batches: 636 | Val batches: 71
-Epoch [27/30] wSDR Train: -9.1602 | Val: -8.8009
+Epoch [50/60] wSDR Train: -9.4207 | Val: -9.4395
+Archive checkpoint saved: ./complex_checkpoints/dcunet_epoch_50.pth
 
-[Epoch 28/30] Current Learning Rate: 5.00e-05
+[Epoch 51/60] Current Learning Rate: 5.00e-05
 Train batches: 636 | Val batches: 71
-Epoch [28/30] wSDR Train: -9.1862 | Val: -8.9268
-New best model saved with val_loss: -8.9268
+Epoch [51/60] wSDR Train: -9.4212 | Val: -9.4270
 
-[Epoch 29/30] Current Learning Rate: 5.00e-05
+[Epoch 52/60] Current Learning Rate: 5.00e-05
 Train batches: 636 | Val batches: 71
-Epoch [29/30] wSDR Train: -9.1826 | Val: -8.9184
+Epoch [52/60] wSDR Train: -9.4322 | Val: -9.4527
+New best model saved with val_loss: -9.4527
 
-[Epoch 30/30] Current Learning Rate: 5.00e-05
+[Epoch 53/60] Current Learning Rate: 5.00e-05
 Train batches: 636 | Val batches: 71
-Epoch [30/30] wSDR Train: -9.2248 | Val: -8.9941
-New best model saved with val_loss: -8.9941
-Archive checkpoint saved: ./complex_checkpoints/dcunet_epoch_30.pth
+Epoch [53/60] wSDR Train: -9.4399 | Val: -9.4364
+
+[Epoch 54/60] Current Learning Rate: 5.00e-05
+Train batches: 636 | Val batches: 71
+Epoch [54/60] wSDR Train: -9.4469 | Val: -9.4791
+New best model saved with val_loss: -9.4791
+
+[Epoch 55/60] Current Learning Rate: 5.00e-05
+Train batches: 636 | Val batches: 71
+Epoch [55/60] wSDR Train: -9.4516 | Val: -9.4343
+
+[Epoch 56/60] Current Learning Rate: 5.00e-05
+Train batches: 636 | Val batches: 71
+Epoch [56/60] wSDR Train: -9.4528 | Val: -9.4855
+New best model saved with val_loss: -9.4855
+
+[Epoch 57/60] Current Learning Rate: 5.00e-05
+Train batches: 636 | Val batches: 71
+Epoch [57/60] wSDR Train: -9.4628 | Val: -9.4763
+
+[Epoch 58/60] Current Learning Rate: 5.00e-05
+Train batches: 636 | Val batches: 71
+Epoch [58/60] wSDR Train: -9.4678 | Val: -9.4017
+
+[Epoch 59/60] Current Learning Rate: 5.00e-05
+Train batches: 636 | Val batches: 71
+Epoch [59/60] wSDR Train: -9.4693 | Val: -9.4460
+
+[Epoch 60/60] Current Learning Rate: 5.00e-05
+Train batches: 636 | Val batches: 71
+Epoch [60/60] wSDR Train: -9.4742 | Val: -9.4855
+Archive checkpoint saved: ./complex_checkpoints/dcunet_epoch_60.pth
