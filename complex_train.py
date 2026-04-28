@@ -22,7 +22,7 @@ NOISY_DIR = os.path.join(DATA_BASE, "noisy")
 
 BATCH_SIZE = 16
 NUM_EPOCHS = 100 
-LEARNING_RATE = 2e-4
+LEARNING_RATE = 0.0001
 # LEARNING_RATE = 5e-5 # Lowered for final precision fine-tuning
 # loss function from the original paper
 class wSDRLoss(nn.Module):
@@ -130,12 +130,11 @@ def validate_one_epoch(model, dataloader, criterion):
             
     return running_loss / (len(dataloader) + 1e-8)
 
-def save_checkpoint(model, optimizer, scheduler, epoch, best_val_loss, filename):
+def save_checkpoint(model, optimizer, epoch, best_val_loss, filename):
     checkpoint = {
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
-        'scheduler_state_dict': scheduler.state_dict(),
         'best_val_loss': best_val_loss
     }
     torch.save(checkpoint, filename)
@@ -161,16 +160,14 @@ def main():
     model = DeepComplexUNet(n_channels=1).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     criterion = wSDRLoss()
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3, factor=0.5)
-    # reduce lerning rate when validation loss stop improve ; verbose  = true make it print when it reduce; its not working in the pytorch version 
+    
 
     if checkpoint_path:
         print(f"Resuming from checkpoint: {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path, map_location=DEVICE)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        if 'scheduler_state_dict' in checkpoint:
-            scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+
         start_epoch = checkpoint['epoch'] + 1
         best_val_loss = checkpoint.get('best_val_loss', float('inf'))
         
@@ -195,17 +192,16 @@ def main():
         with open(log_file, "a", newline="") as f:
             writer = csv.writer(f)
             writer.writerow([epoch + 1, avg_loss, val_loss])
-        scheduler.step(val_loss)
         
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             best_path = os.path.join(SAVE_DIR, "best_model.pth")
-            save_checkpoint(model, optimizer, scheduler, epoch, best_val_loss, best_path)
+            save_checkpoint(model, optimizer, epoch, best_val_loss, best_path)
             print(f"New best model saved with val_loss: {best_val_loss:.4f}")
             
         # 1. Save "latest" for every single epoch (Safety snapshot)
         latest_save_path = os.path.join(SAVE_DIR, "latest_checkpoint.pth")
-        save_checkpoint(model, optimizer, scheduler, epoch, val_loss, latest_save_path)
+        save_checkpoint(model, optimizer, epoch, val_loss, latest_save_path)
         
 if __name__ == "__main__":
     main()
