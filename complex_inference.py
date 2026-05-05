@@ -2,6 +2,8 @@ import torch
 import torchaudio
 import soundfile as sf
 import os
+import pyloudnorm as pyln
+import numpy as np
 from complex_model import DeepComplexUNet
 
 def infer_complex_audio(noisy_wav_path, model_path, output_path="complex_cleaned_result.wav"):
@@ -102,12 +104,38 @@ def infer_complex_audio(noisy_wav_path, model_path, output_path="complex_cleaned
     os.makedirs(os.path.dirname(output_path), exist_ok=True) if os.path.dirname(output_path) else None
 
     print(f"Saving DCUNet cleaned audio to {output_path}")
+    
+    normalize_loudness(noisy_waveform.numpy().T, sample_rate)
+    normalize_loudness(cleaned_waveform.numpy().T, sample_rate)
+    
     sf.write(output_path, cleaned_waveform.squeeze(0).cpu().numpy(), sample_rate)
+    
+def normalize_loudness(audio, sample_rate, target_lufs=-23.0):
+    print("normalizing loudness...")
+    
+    meter = pyln.Meter(sample_rate)
+    current_loudness = meter.integrated_loudness(audio)
+    
+    print(f"Current Loudness: {current_loudness:.2f} LUFS")
+    
+    normalized_audio = pyln.normalize.loudness(audio, current_loudness, target_lufs)
+    
+    max_peak = np.max(np.abs(normalized_audio))
+    if max_peak >= 1.0:
+        print("Warning: Normalized audio exceeds 0dB. Applying peak scaling.")
+        normalized_audio = normalized_audio / (max_peak + 1e-6)
+        
+    return normalized_audio
+    
 
 if __name__ == "__main__":
-    MODEL_WEIGHTS = "./complex_checkpoints/latest_checkpoint.pth"
-    INPUT_DIR = "test123"
-    OUTPUT_DIR = "test123" # Saving back into the same folder for convenience
+    
+    #MODEL_WEIGHTS = "C:/Users/zikan/Uni/erasmus2026/PBLproject/jahid_code_version/DCUnet_v2_wns/complex_checkpoints/model_with_overlap/dcunet_epoch_100.pth"
+    #INPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/roof-rec-1st/test_sets/dynamic_shield/25cm/segmented"
+    # MODEL_WEIGHTS = "C:/Users/zikan/Uni/erasmus2026/PBLproject/jahid_code_version/DCUnet_v2_wns/complex_checkpoints/model_no_overlap/best_model_4.pth"
+    MODEL_WEIGHTS = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/TESTING/OVERLAP/dcunet_epoch_overlap.pth"
+    INPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini"
+    OUTPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/TESTING/OVERLAP" # Saving back into the same folder for convenience
 
     if not os.path.exists(MODEL_WEIGHTS):
         MODEL_WEIGHTS = "./complex_checkpoints/dcunet_epoch_120.pth"
