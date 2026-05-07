@@ -112,12 +112,19 @@ def infer_complex_audio(noisy_wav_path, model_path, output_normalized_noisy, fil
 
     print(f"Saving DCUNet cleaned audio to {output_enhanced_path}")
     
-    noisy_waveform = normalize_loudness(noisy_waveform.squeeze(0).cpu().numpy(), TARGET_SR)
-    cleaned_waveform = normalize_loudness(cleaned_waveform.squeeze(0).cpu().numpy(), TARGET_SR)
+    #noisy_waveform = normalize_loudness(noisy_waveform.squeeze(0).cpu().numpy(), TARGET_SR)
+    #cleaned_waveform = normalize_loudness(cleaned_waveform.squeeze(0).cpu().numpy(), TARGET_SR)
+    
+    noisy_waveform = noisy_waveform.squeeze(0).cpu().numpy()
+    cleaned_waveform = cleaned_waveform.squeeze(0).cpu().numpy()
     
     if (COMPUTE_EVALUATION):
         if clean_path is not None:
-            clean_np, _ = sf.read(clean_path)
+            clean_np, sr_ = sf.read(clean_path)
+            clean_np = normalize_loudness(clean_np, TARGET_SR)
+            
+            if sr_ != TARGET_SR:
+                Exception("Wrong sample rate of the clean reference")
             
             # Stereo to Mono if needed
             if clean_np.ndim > 1: 
@@ -153,6 +160,15 @@ def evaluate_file(f_name, clean_np, enhanced_np, noisy_np, results):
     clean_eval = clean_np[:min_len]
     enhanced_eval = enhanced_np[:min_len]
     noisy_eval = noisy_np[:min_len]
+    
+    clean_eval = clean_eval.astype(np.float32)
+    enhanced_eval = enhanced_eval.astype(np.float32)
+    noisy_eval = noisy_eval.astype(np.float32)
+    
+    clean_eval = clean_eval / (max(abs(clean_eval)))
+    enhanced_eval = enhanced_eval / (max(abs(enhanced_eval)))
+    noisy_eval = noisy_eval / (max(abs(noisy_eval)))
+    
    
     res = {"file": f_name}
     res["stoi_en"] = stoi(clean_eval, enhanced_eval, TARGET_SR, extended=False)
@@ -162,8 +178,13 @@ def evaluate_file(f_name, clean_np, enhanced_np, noisy_np, results):
     res["si-sdr-en"] = compute_si_sdr(clean_eval, enhanced_eval)
     res["si-sdr-no"] = compute_si_sdr(clean_eval, noisy_eval)
     
-    res["pesq_en"] = pesq(TARGET_SR, clean_eval, enhanced_eval, 'wb')
-    res["pesq_no"] = pesq(TARGET_SR, clean_eval, noisy_eval , 'wb')
+    try:
+        res["pesq_en"] = pesq(TARGET_SR, clean_eval, enhanced_eval, 'wb')
+        res["pesq_no"] = pesq(TARGET_SR, clean_eval, noisy_eval , 'wb')
+    except:
+        Warning("pesq failed")
+        res["pesq_en"] = None
+        res["pesq_no"] = None
     
     results.append(res)
     
@@ -221,13 +242,13 @@ if __name__ == "__main__":
     #INPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/roof-rec-1st/test_sets/dynamic_shield/25cm/segmented"
     #MODEL_WEIGHTS = "C:/Users/zikan/Uni/erasmus2026/PBLproject/jahid_code_version/DCUnet_v2_wns/complex_checkpoints/model_no_overlap/best_model_4.pth"
     MODEL_WEIGHTS = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/TESTING/OVERLAP/dcunet_epoch_overlap.pth"
-    INPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_smart/loudness-test/noisy"
+    INPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_smart/SNR_-5"
     #INPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/TESTING/testing_spectral_leakage"
     #OUTPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/TESTING/OVERLAP" # Saving back into the same folder for convenience
     #OUTPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/TESTING/testing_spectral_leakage"
-    OUTPUT_ENHANCED =  "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_smart/loudness-test/clean"
-    NOISY_NORMALIZED = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_smart/loudness-test/normalized-noisy"
-    CLEAN_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_smart/loudness-test/clean"
+    OUTPUT_ENHANCED =  "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_smart/OUTPUT/snr_-5/overlap"
+    NOISY_NORMALIZED = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_smart/OUTPUT/snr_-5/normalized_noisy"
+    CLEAN_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_smart/speech"
     COMPUTE_EVALUATION = True
     
     if COMPUTE_EVALUATION: 
@@ -250,7 +271,6 @@ if __name__ == "__main__":
             output_name = f"{os.path.splitext(file_name)[0]}.wav"
             output_enhanced_path = os.path.join(OUTPUT_ENHANCED, output_name)
             noisy_normalized_path = os.path.join(NOISY_NORMALIZED, output_name)
-            
             
             print(f"Processing: {file_name} -> {output_name}")
             if (COMPUTE_EVALUATION):
