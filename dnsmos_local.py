@@ -99,12 +99,12 @@ class ComputeScore:
         clip_dict['P808_MOS'] = np.mean(predicted_p808_mos)
         return clip_dict
 
-def main(args):
-    models = glob.glob(os.path.join(args.testset_dir, "*"))
+def main_dnsmos(testset_dir, personalized_MOS=False, csv_path=None):
+    models = glob.glob(os.path.join(testset_dir, "*"))
     audio_clips_list = []
     p808_model_path = os.path.join('DNSMOS', 'model_v8.onnx')
 
-    if args.personalized_MOS:
+    if personalized_MOS:
         primary_model_path = os.path.join('pDNSMOS', 'sig_bak_ovr.onnx')
     else:
         primary_model_path = os.path.join('DNSMOS', 'sig_bak_ovr.onnx')
@@ -113,12 +113,12 @@ def main(args):
 
     rows = []
     clips = []
-    clips = glob.glob(os.path.join(args.testset_dir, "*.wav"))
-    is_personalized_eval = args.personalized_MOS
+    clips = glob.glob(os.path.join(testset_dir, "*.wav"))
+    is_personalized_eval = personalized_MOS
     desired_fs = SAMPLING_RATE
     for m in tqdm(models):
         max_recursion_depth = 10
-        audio_path = os.path.join(args.testset_dir, m)
+        audio_path = os.path.join(testset_dir, m)
         audio_clips_list = glob.glob(os.path.join(audio_path, "*.wav"))
         while len(audio_clips_list) == 0 and max_recursion_depth > 0:
             audio_path = os.path.join(audio_path, "**")
@@ -138,21 +138,24 @@ def main(args):
                 rows.append(data)            
 
     df = pd.DataFrame(rows)
-    if args.csv_path:
-        csv_path = args.csv_path
+    if csv_path:
+        csv_path = csv_path
         df.to_csv(csv_path)
     else:
         print(df.describe())
 
 if __name__=="__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-t', "--testset_dir", default='.', 
-                        help='Path to the dir containing audio clips in .wav to be evaluated')
-    parser.add_argument('-o', "--csv_path", default=None, help='Dir to the csv that saves the results')
-    parser.add_argument('-p', "--personalized_MOS", action='store_true', 
-                        help='Flag to indicate if personalized MOS score is needed or regular')
+    TESTSET_DIR = ""
+    CSV_DIR = None
+    main_dnsmos(TESTSET_DIR, csv_path = CSV_DIR)
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('-t', "--testset_dir", default='.', 
+    #                     help='Path to the dir containing audio clips in .wav to be evaluated')
+    # parser.add_argument('-o', "--csv_path", default=None, help='Dir to the csv that saves the results')
+    # parser.add_argument('-p', "--personalized_MOS", action='store_true', 
+    #                     help='Flag to indicate if personalized MOS score is needed or regular')
     
-    args = parser.parse_args()
+    # args = parser.parse_args()
 
     
     # main(args)
@@ -172,4 +175,4 @@ if __name__=="__main__":
     # args.csv_path = csv_path
     # args.personalized_MOS = personalized_MOS
 
-    main(args)
+    #main(args)
