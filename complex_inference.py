@@ -6,7 +6,7 @@ import pyloudnorm as pyln
 import numpy as np
 from complex_model import DeepComplexUNet
 
-def infer_complex_audio(noisy_wav_path, model_path, output_path="complex_cleaned_result.wav"):
+def infer_complex_audio(noisy_wav_path, model_path, output_normalized_noisy, output_normalized_enhanced="complex_cleaned_result.wav" ):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
@@ -101,18 +101,22 @@ def infer_complex_audio(noisy_wav_path, model_path, output_path="complex_cleaned
     cleaned_waveform = cleaned_waveform * max_amp
 
     # Ensure output directory exists
-    os.makedirs(os.path.dirname(output_path), exist_ok=True) if os.path.dirname(output_path) else None
+    os.makedirs(os.path.dirname(output_enhanced_path), exist_ok=True) if os.path.dirname(output_enhanced_path) else None
+    
+    # Ensure output directory exists
+    os.makedirs(os.path.dirname(output_normalized_noisy), exist_ok=True) if os.path.dirname(output_normalized_noisy) else None
 
-    print(f"Saving DCUNet cleaned audio to {output_path}")
+    print(f"Saving DCUNet cleaned audio to {output_enhanced_path}")
     
-    normalize_loudness(noisy_waveform.numpy().T, sample_rate)
-    normalize_loudness(cleaned_waveform.numpy().T, sample_rate)
+    noisy_waveform = normalize_loudness(noisy_waveform.squeeze(0).cpu().numpy(), sample_rate)
+    cleaned_waveform = normalize_loudness(cleaned_waveform.squeeze(0).cpu().numpy(), sample_rate)
     
-    sf.write(output_path, cleaned_waveform.squeeze(0).cpu().numpy(), sample_rate)
+    sf.write(output_normalized_enhanced, cleaned_waveform, sample_rate)
+    sf.write(output_normalized_noisy, noisy_waveform, sample_rate)
+    
     
 def normalize_loudness(audio, sample_rate, target_lufs=-23.0):
-    print("normalizing loudness...")
-    
+   
     meter = pyln.Meter(sample_rate)
     current_loudness = meter.integrated_loudness(audio)
     
@@ -122,7 +126,6 @@ def normalize_loudness(audio, sample_rate, target_lufs=-23.0):
     
     max_peak = np.max(np.abs(normalized_audio))
     if max_peak >= 1.0:
-        print("Warning: Normalized audio exceeds 0dB. Applying peak scaling.")
         normalized_audio = normalized_audio / (max_peak + 1e-6)
         
     return normalized_audio
@@ -132,11 +135,15 @@ if __name__ == "__main__":
     
     #MODEL_WEIGHTS = "C:/Users/zikan/Uni/erasmus2026/PBLproject/jahid_code_version/DCUnet_v2_wns/complex_checkpoints/model_with_overlap/dcunet_epoch_100.pth"
     #INPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/roof-rec-1st/test_sets/dynamic_shield/25cm/segmented"
-    # MODEL_WEIGHTS = "C:/Users/zikan/Uni/erasmus2026/PBLproject/jahid_code_version/DCUnet_v2_wns/complex_checkpoints/model_no_overlap/best_model_4.pth"
+    #MODEL_WEIGHTS = "C:/Users/zikan/Uni/erasmus2026/PBLproject/jahid_code_version/DCUnet_v2_wns/complex_checkpoints/model_no_overlap/best_model_4.pth"
     MODEL_WEIGHTS = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/TESTING/OVERLAP/dcunet_epoch_overlap.pth"
-    INPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini"
-    OUTPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/TESTING/OVERLAP" # Saving back into the same folder for convenience
-
+    INPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_smart/loudness-test/noisy"
+    #INPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/TESTING/testing_spectral_leakage"
+    #OUTPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/TESTING/OVERLAP" # Saving back into the same folder for convenience
+    #OUTPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/TESTING/testing_spectral_leakage"
+    OUTPUT_ENHANCED =  "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_smart/loudness-test/clean"
+    NOISY_NORMALIZED = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_smart/loudness-test/normalized-noisy"
+    
     if not os.path.exists(MODEL_WEIGHTS):
         MODEL_WEIGHTS = "./complex_checkpoints/dcunet_epoch_120.pth"
 
@@ -150,14 +157,16 @@ if __name__ == "__main__":
 
         for file_name in files:
             input_path = os.path.join(INPUT_DIR, file_name)
-            output_name = f"cleaned_{os.path.splitext(file_name)[0]}_120.wav"
-            output_path = os.path.join(OUTPUT_DIR, output_name)
+            output_name = f"{os.path.splitext(file_name)[0]}.wav"
+            output_enhanced_path = os.path.join(OUTPUT_ENHANCED, output_name)
+            noisy_normalized_path = os.path.join(NOISY_NORMALIZED, output_name)
             
             print(f"Processing: {file_name} -> {output_name}")
             infer_complex_audio(
                noisy_wav_path=input_path, 
                model_path=MODEL_WEIGHTS, 
-               output_path=output_path
+               output_normalized_noisy=noisy_normalized_path,
+               output_normalized_enhanced=output_enhanced_path
             )
 
         print("\nAll files processed successfully!")
