@@ -8,6 +8,8 @@ import pandas as pd
 from complex_model import DeepComplexUNet
 from pesq import pesq
 from pystoi import stoi
+from dnsmos_local import main_dnsmos
+from torch_squim_evaluator import SquimEvaluator
 
 TARGET_SR = 16000
 N_FFT = 512
@@ -105,18 +107,18 @@ def infer_complex_audio(noisy_wav_path, model_path, output_normalized_noisy, fil
     cleaned_waveform = cleaned_waveform * max_amp
 
     # Ensure output directory exists
-    os.makedirs(os.path.dirname(output_enhanced_path), exist_ok=True) if os.path.dirname(output_enhanced_path) else None
+    os.makedirs(os.path.dirname(output_normalized_enhanced), exist_ok=True) if os.path.dirname(output_normalized_enhanced) else None
     
     # Ensure output directory exists
     os.makedirs(os.path.dirname(output_normalized_noisy), exist_ok=True) if os.path.dirname(output_normalized_noisy) else None
 
-    print(f"Saving DCUNet cleaned audio to {output_enhanced_path}")
+    print(f"Saving DCUNet cleaned audio to {output_normalized_enhanced}")
     
-    #noisy_waveform = normalize_loudness(noisy_waveform.squeeze(0).cpu().numpy(), TARGET_SR)
-    #cleaned_waveform = normalize_loudness(cleaned_waveform.squeeze(0).cpu().numpy(), TARGET_SR)
+    noisy_waveform_np = normalize_loudness(noisy_waveform.squeeze(0).cpu().numpy(), TARGET_SR)
+    cleaned_waveform_np = normalize_loudness(cleaned_waveform.squeeze(0).cpu().numpy(), TARGET_SR)
     
-    noisy_waveform = noisy_waveform.squeeze(0).cpu().numpy()
-    cleaned_waveform = cleaned_waveform.squeeze(0).cpu().numpy()
+    #noisy_waveform_np = noisy_waveform_np.squeeze(0).cpu().numpy()
+    #cleaned_waveform_np = cleaned_waveform_np.squeeze(0).cpu().numpy()
     
     if (COMPUTE_EVALUATION):
         if clean_path is not None:
@@ -130,14 +132,15 @@ def infer_complex_audio(noisy_wav_path, model_path, output_normalized_noisy, fil
             if clean_np.ndim > 1: 
                 clean_np = clean_np.mean(axis=1)
                 
-            evaluate_file(file_name, clean_np, cleaned_waveform, noisy_waveform, results)
+            evaluate_file(file_name, clean_np, cleaned_waveform_np, noisy_waveform_np, noisy_waveform, cleaned_waveform, results)
+            
         else:
             Exception("Clean path must be defined for evaluation")
         
         
     
-    sf.write(output_normalized_enhanced, cleaned_waveform, TARGET_SR)
-    sf.write(output_normalized_noisy, noisy_waveform, TARGET_SR)
+    sf.write(output_normalized_enhanced, cleaned_waveform_np, TARGET_SR)
+    sf.write(output_normalized_noisy, noisy_waveform_np, TARGET_SR)
     
     
 def normalize_loudness(audio, sample_rate, target_lufs=-23.0):
@@ -155,7 +158,7 @@ def normalize_loudness(audio, sample_rate, target_lufs=-23.0):
         
     return normalized_audio
 
-def evaluate_file(f_name, clean_np, enhanced_np, noisy_np, results):
+def evaluate_file(f_name, clean_np, enhanced_np, noisy_np, noisy_waveform, enhanced_wavefrom, results):
     min_len = min(len(clean_np), len(enhanced_np), len(noisy_np))
     clean_eval = clean_np[:min_len]
     enhanced_eval = enhanced_np[:min_len]
@@ -169,6 +172,9 @@ def evaluate_file(f_name, clean_np, enhanced_np, noisy_np, results):
     enhanced_eval = enhanced_eval / (max(abs(enhanced_eval)))
     noisy_eval = noisy_eval / (max(abs(noisy_eval)))
     
+    scores_noisy = compute_squim(noisy_waveform)
+    scores_enhanced = compute_squim(enhanced_wavefrom)
+    
    
     res = {"file": f_name}
     res["stoi_en"] = stoi(clean_eval, enhanced_eval, TARGET_SR, extended=False)
@@ -177,6 +183,16 @@ def evaluate_file(f_name, clean_np, enhanced_np, noisy_np, results):
     res["sdr_no"] = 10 * np.log10(np.sum(clean_eval**2) / (np.sum((clean_eval - noisy_eval)**2) + 1e-8))
     res["si-sdr-en"] = compute_si_sdr(clean_eval, enhanced_eval)
     res["si-sdr-no"] = compute_si_sdr(clean_eval, noisy_eval)
+    
+    res["squim-stoi-no"] = scores_noisy["stoi"]
+    res["squim-pesq-no"] = scores_noisy["pesq"]
+    res["squim-si-sdr-no"] = scores_noisy["si_sdr"]
+    #res["squim-mos-no"] = scores_noisy["mos"]
+    
+    res["squim-stoi-en"] = scores_enhanced["stoi"]
+    res["squim-pesq-en"] = scores_enhanced["pesq"]
+    res["squim-si-sdr-en"] = scores_enhanced["si_sdr"]
+    #res["squim-mos-en"] = scores_enhanced["mos"]
     
     try:
         res["pesq_en"] = pesq(TARGET_SR, clean_eval, enhanced_eval, 'wb')
@@ -187,6 +203,7 @@ def evaluate_file(f_name, clean_np, enhanced_np, noisy_np, results):
         res["pesq_no"] = None
     
     results.append(res)
+    
     
 def print_and_save_evaluation_results(results):
     df = pd.DataFrame(results)
@@ -214,6 +231,23 @@ def print_and_save_evaluation_results(results):
     print(f"{'PESQ':<10} "
         f"{df['pesq_en'].mean():<15.4f} "
         f"{df['pesq_no'].mean():<15.4f}")
+    
+    
+    print(f"{'Squim STOI':<10} "
+        f"{df['squim-stoi-en'].mean():<15.4f} "
+        f"{df['squim-stoi-no'].mean():<15.4f}")
+    
+    print(f"{'Squim PESQ':<10} "
+        f"{df['squim-pesq-en'].mean():<15.4f} "
+        f"{df['squim-pesq-no'].mean():<15.4f}")
+    
+    print(f"{'Squim SI-SDR':<10} "
+        f"{df['squim-si-sdr-en'].mean():<15.4f} "
+        f"{df['squim-si-sdr-no'].mean():<15.4f}")
+    
+    #print(f"{'Squim MOS':<10} "
+     #   f"{df['squim-mos-en'].mean():<15.4f} "
+      #  f"{df['squim-mos-no'].mean():<15.4f}")
 
     print("=" * 50)
 
@@ -234,7 +268,15 @@ def compute_si_sdr(reference, enhanced, eps=1e-8):
     # SI-SDR
     ratio = (np.sum(target ** 2) + eps) / (np.sum(noise ** 2) + eps)
     return 10 * np.log10(ratio)
+ 
+def compute_squim(audio_torch):
+    evaluator = SquimEvaluator()
+    scores = evaluator.evaluate(audio_torch)
     
+    return scores
+    
+    
+   
 
 if __name__ == "__main__":
     
@@ -264,8 +306,9 @@ if __name__ == "__main__":
         print(f"No .wav files found in {INPUT_DIR}")
     else:
         print(f"Cleaning {len(files)} files...")
-
+    
         for file_name in files:
+        
             input_path = os.path.join(INPUT_DIR, file_name)
             print(input_path)
             output_name = f"{os.path.splitext(file_name)[0]}.wav"
@@ -294,7 +337,15 @@ if __name__ == "__main__":
                     file_name = file_name,
                     output_normalized_enhanced=output_enhanced_path,
                 )
+            
         
         print("\nAll files processed successfully!")
         if (COMPUTE_EVALUATION):
+            print("MODEL "+MODEL_WEIGHTS)
+            print("INPUT (NOISY) "+INPUT_DIR)
+            
             print_and_save_evaluation_results(results_list)
+            print("DNSMOS enhanced:")
+            main_dnsmos(OUTPUT_ENHANCED)
+            print("DNSMOS noisy:")
+            main_dnsmos(NOISY_NORMALIZED)
