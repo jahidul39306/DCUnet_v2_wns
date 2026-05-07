@@ -4,9 +4,18 @@ import soundfile as sf
 import os
 import pyloudnorm as pyln
 import numpy as np
+import pandas as pd
 from complex_model import DeepComplexUNet
+from pesq import pesq
+from pystoi import stoi
 
-def infer_complex_audio(noisy_wav_path, model_path, output_normalized_noisy, output_normalized_enhanced="complex_cleaned_result.wav" ):
+TARGET_SR = 16000
+N_FFT = 512
+HOP_LENGTH = 256
+COMPUTE_EVALUATION = True
+OUTPUT_CSV = None
+
+def infer_complex_audio(noisy_wav_path, model_path, output_normalized_noisy, file_name, output_normalized_enhanced="complex_cleaned_result.wav", clean_path = None, results = None ):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
@@ -23,11 +32,6 @@ def infer_complex_audio(noisy_wav_path, model_path, output_normalized_noisy, out
     model.eval()
     print(f"Model loaded successfully from {model_path}.")
 
-    # 2. Audio settings
-    sample_rate = 16000
-    n_fft = 512
-    hop_length = 256
-    
     # Load and prep audio
     if not os.path.exists(noisy_wav_path):
         print(f"Error: File not found: {noisy_wav_path}")
@@ -40,8 +44,8 @@ def infer_complex_audio(noisy_wav_path, model_path, output_normalized_noisy, out
         # soundfile returns [Time, Channels], PyTorch needs [Channels, Time]
         noisy_waveform = torch.from_numpy(data.T)
     
-    if sr != sample_rate:
-        noisy_waveform = torchaudio.transforms.Resample(sr, sample_rate)(noisy_waveform)
+    if sr != TARGET_SR:
+        noisy_waveform = torchaudio.transforms.Resample(sr, TARGET_SR)(noisy_waveform)
     
     if noisy_waveform.shape[0] > 1:
         noisy_waveform = torch.mean(noisy_waveform, dim=0, keepdim=True)
@@ -52,15 +56,15 @@ def infer_complex_audio(noisy_wav_path, model_path, output_normalized_noisy, out
 
     # 3. Apply STFT 
     stft = torchaudio.transforms.Spectrogram(
-        n_fft=n_fft, 
-        hop_length=hop_length, 
+        n_fft=N_FFT, 
+        hop_length=HOP_LENGTH, 
         power=None, 
         normalized=True # Must match complex_data_prep!
     )
     
     istft = torchaudio.transforms.InverseSpectrogram(
-        n_fft=n_fft, 
-        hop_length=hop_length, 
+        n_fft=N_FFT, 
+        hop_length=HOP_LENGTH, 
         normalized=True
     )
 
@@ -108,11 +112,25 @@ def infer_complex_audio(noisy_wav_path, model_path, output_normalized_noisy, out
 
     print(f"Saving DCUNet cleaned audio to {output_enhanced_path}")
     
-    noisy_waveform = normalize_loudness(noisy_waveform.squeeze(0).cpu().numpy(), sample_rate)
-    cleaned_waveform = normalize_loudness(cleaned_waveform.squeeze(0).cpu().numpy(), sample_rate)
+    noisy_waveform = normalize_loudness(noisy_waveform.squeeze(0).cpu().numpy(), TARGET_SR)
+    cleaned_waveform = normalize_loudness(cleaned_waveform.squeeze(0).cpu().numpy(), TARGET_SR)
     
-    sf.write(output_normalized_enhanced, cleaned_waveform, sample_rate)
-    sf.write(output_normalized_noisy, noisy_waveform, sample_rate)
+    if (COMPUTE_EVALUATION):
+        if clean_path is not None:
+            clean_np, _ = sf.read(clean_path)
+            
+            # Stereo to Mono if needed
+            if clean_np.ndim > 1: 
+                clean_np = clean_np.mean(axis=1)
+                
+            evaluate_file(file_name, clean_np, cleaned_waveform, noisy_waveform, results)
+        else:
+            Exception("Clean path must be defined for evaluation")
+        
+        
+    
+    sf.write(output_normalized_enhanced, cleaned_waveform, TARGET_SR)
+    sf.write(output_normalized_noisy, noisy_waveform, TARGET_SR)
     
     
 def normalize_loudness(audio, sample_rate, target_lufs=-23.0):
@@ -129,6 +147,72 @@ def normalize_loudness(audio, sample_rate, target_lufs=-23.0):
         normalized_audio = normalized_audio / (max_peak + 1e-6)
         
     return normalized_audio
+
+def evaluate_file(f_name, clean_np, enhanced_np, noisy_np, results):
+    min_len = min(len(clean_np), len(enhanced_np), len(noisy_np))
+    clean_eval = clean_np[:min_len]
+    enhanced_eval = enhanced_np[:min_len]
+    noisy_eval = noisy_np[:min_len]
+   
+    res = {"file": f_name}
+    res["stoi_en"] = stoi(clean_eval, enhanced_eval, TARGET_SR, extended=False)
+    res["stoi_no"] = stoi(clean_eval, noisy_eval, TARGET_SR, extended=False)
+    res["sdr_en"] = 10 * np.log10(np.sum(clean_eval**2) / (np.sum((clean_eval - enhanced_eval)**2) + 1e-8))
+    res["sdr_no"] = 10 * np.log10(np.sum(clean_eval**2) / (np.sum((clean_eval - noisy_eval)**2) + 1e-8))
+    res["si-sdr-en"] = compute_si_sdr(clean_eval, enhanced_eval)
+    res["si-sdr-no"] = compute_si_sdr(clean_eval, noisy_eval)
+    
+    res["pesq_en"] = pesq(TARGET_SR, clean_eval, enhanced_eval, 'wb')
+    res["pesq_no"] = pesq(TARGET_SR, clean_eval, noisy_eval , 'wb')
+    
+    results.append(res)
+    
+def print_and_save_evaluation_results(results):
+    df = pd.DataFrame(results)
+    if OUTPUT_CSV is not None:
+       df.to_csv(OUTPUT_CSV, index=False) 
+    else:
+        Warning("CSV path is not defined. Results have not been saved")
+    
+    print("\n" + "=" * 50)
+    print(f"{'Metric':<10} {'Enhanced':<15} {'Noisy':<15}")
+    print("=" * 50)
+
+    print(f"{'STOI':<10} "
+        f"{df['stoi_en'].mean():<15.4f} "
+        f"{df['stoi_no'].mean():<15.4f}")
+
+    print(f"{'SDR (dB)':<10} "
+        f"{df['sdr_en'].mean():<15.2f}"
+        f"{df['sdr_no'].mean():<15.2f}")
+
+    print(f"{'SI-SDR(dB)':<10} "
+        f"{df['si-sdr-en'].mean():<15.2f}"
+        f"{df['si-sdr-no'].mean():<15.2f}")
+
+    print(f"{'PESQ':<10} "
+        f"{df['pesq_en'].mean():<15.4f} "
+        f"{df['pesq_no'].mean():<15.4f}")
+
+    print("=" * 50)
+
+    
+def compute_si_sdr(reference, enhanced, eps=1e-8):
+    
+    # Zero-mean normalization
+    reference = reference - np.mean(reference)
+    enhanced = enhanced - np.mean(enhanced)
+
+    # Projection of estimation onto reference
+    alpha = np.dot(enhanced, reference) / (np.dot(reference, reference) + eps)
+    target = alpha * reference
+
+    # Noise/error component
+    noise = target - enhanced
+
+    # SI-SDR
+    ratio = (np.sum(target ** 2) + eps) / (np.sum(noise ** 2) + eps)
+    return 10 * np.log10(ratio)
     
 
 if __name__ == "__main__":
@@ -143,6 +227,11 @@ if __name__ == "__main__":
     #OUTPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/TESTING/testing_spectral_leakage"
     OUTPUT_ENHANCED =  "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_smart/loudness-test/clean"
     NOISY_NORMALIZED = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_smart/loudness-test/normalized-noisy"
+    CLEAN_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_smart/loudness-test/clean"
+    COMPUTE_EVALUATION = True
+    
+    if COMPUTE_EVALUATION: 
+        results_list = []
     
     if not os.path.exists(MODEL_WEIGHTS):
         MODEL_WEIGHTS = "./complex_checkpoints/dcunet_epoch_120.pth"
@@ -157,16 +246,35 @@ if __name__ == "__main__":
 
         for file_name in files:
             input_path = os.path.join(INPUT_DIR, file_name)
+            print(input_path)
             output_name = f"{os.path.splitext(file_name)[0]}.wav"
             output_enhanced_path = os.path.join(OUTPUT_ENHANCED, output_name)
             noisy_normalized_path = os.path.join(NOISY_NORMALIZED, output_name)
             
+            
             print(f"Processing: {file_name} -> {output_name}")
-            infer_complex_audio(
-               noisy_wav_path=input_path, 
-               model_path=MODEL_WEIGHTS, 
-               output_normalized_noisy=noisy_normalized_path,
-               output_normalized_enhanced=output_enhanced_path
-            )
-
+            if (COMPUTE_EVALUATION):
+                clean_path = os.path.join(CLEAN_DIR, file_name)
+                print(clean_path)
+                print("COMPUTE EVALUATION")
+                infer_complex_audio(
+                    noisy_wav_path=input_path, 
+                    model_path=MODEL_WEIGHTS, 
+                    output_normalized_noisy=noisy_normalized_path,
+                    file_name = file_name,
+                    output_normalized_enhanced=output_enhanced_path,
+                    clean_path = clean_path,
+                    results = results_list
+                )
+            else:
+                infer_complex_audio(
+                    noisy_wav_path=input_path, 
+                    model_path=MODEL_WEIGHTS, 
+                    output_normalized_noisy=noisy_normalized_path,
+                    file_name = file_name,
+                    output_normalized_enhanced=output_enhanced_path,
+                )
+        
         print("\nAll files processed successfully!")
+        if (COMPUTE_EVALUATION):
+            print_and_save_evaluation_results(results_list)
