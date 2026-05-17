@@ -56,7 +56,7 @@ def infer_complex_audio(model, noisy_np, output_normalized_noisy, file_name, out
     max_amp = torch.max(torch.abs(noisy_waveform)) + 1e-8
     noisy_waveform = noisy_waveform / max_amp
 
-    # 3. Apply STFT 
+    # Apply STFT 
     stft = torchaudio.transforms.Spectrogram(
         n_fft=N_FFT, 
         hop_length=HOP_LENGTH, 
@@ -96,11 +96,10 @@ def infer_complex_audio(model, noisy_np, output_normalized_noisy, file_name, out
     pred_clean_real = pred_clean_real.squeeze(0) * normalize_factor
     pred_clean_imag = pred_clean_imag.squeeze(0) * normalize_factor
     
-    # 5. Re-combine into a raw Complex Tensor
-    # We no longer need Griffin-Lim because the model PREDICTED the phase geometry for us!
+    # Re-combine into a raw Complex Tensor
     cleaned_complex = torch.complex(pred_clean_real, pred_clean_imag).cpu()
     
-    # 6. Apply Inverse STFT
+    # Apply Inverse STFT
     cleaned_waveform = istft(cleaned_complex)
     
     # Restore Original Volume
@@ -212,14 +211,10 @@ def infer_complex_audio(model, noisy_np, output_normalized_noisy, file_name, out
 def align_signals(clean, noisy, enhanced):
 # time align signals using cross correlation
 
-    # def apply_highpass(sig):
-    #     # Use Second-Order Sections (sos) for better numerical stability
-    #     # sos = signal.butter(4, cutoff, btype='highpass', fs=fs, output='sos')
-    #     return signal.sosfiltfilt(hp_filter, sig)
+
 
     def estimate_delay(ref, sig):
-        #ref_filt = apply_highpass(ref)
-        #sig_filt = apply_highpass(sig)
+
         
         corr = np.correlate(sig, ref, mode='full')
         lags = np.arange(-len(ref) + 1, len(sig))
@@ -275,33 +270,47 @@ def get_loudness_norm_factor(audio, meter, sample_rate, target_lufs=-23.0):
     
     return gain_factor
 
-def evaluate_file(f_name, clean_np, enhanced_np, noisy_np, noisy_torch, enhanced_torch, squim_evaluator, loud_meter, results, target_sr):
+def evaluate_file(f_name, enhanced_np, noisy_np, noisy_torch, enhanced_torch, squim_evaluator, results, target_sr, clean_np):
     
     print("Evaluating...")
     
     # Normalize loudness of the clean file 
-    gain_factor_cl = get_loudness_norm_factor(clean_np, loud_meter, target_sr)
-    clean_norm_np = clean_np * gain_factor_cl
+    # gain_factor_cl = get_loudness_norm_factor(clean_np, loud_meter, target_sr)
+    # clean_norm_np = clean_np * gain_factor_cl
     
-    # Scale the other signals using the same factor (to keep the speech level consistent)
-    noisy_norm_np = noisy_np * gain_factor_cl          
-    enhanced_norm_np = enhanced_np * gain_factor_cl
+    # # Scale the other signals using the same factor (to keep the speech level consistent)
+    # noisy_norm_np = noisy_np * gain_factor_cl          
+    # enhanced_norm_np = enhanced_np * gain_factor_cl
+    
+    # clean_norm_np = normalize_loudness(clean_np, loud_meter, target_sr, -23.0)
+    # noisy_norm_np = normalize_loudness(noisy_np, loud_meter, target_sr, -23.0)
+    # enhanced_norm_np = normalize_loudness(enhanced_np, loud_meter, target_sr, -23.0)
+    
+    if config.compute_intrusive_metrics:
+        clean_norm_np = clean_np
+        clean_norm_np = clean_norm_np - np.mean(clean_norm_np)
+    
+    
+    noisy_norm_np = noisy_np
+    enhanced_norm_np = enhanced_np
     
     # If some peak exceeds maximum allowed value, normalize:
-    max_val = max(np.max(np.abs(clean_norm_np)), np.max(np.abs(noisy_norm_np)), np.max(np.abs(enhanced_norm_np)))
-    if max_val > 1.0:
-        clean_norm_np /= max_val
-        noisy_norm_np /= max_val
-        enhanced_norm_np /= max_val
+    # max_val = max(np.max(np.abs(clean_norm_np)), np.max(np.abs(noisy_norm_np)), np.max(np.abs(enhanced_norm_np)))
+    # if max_val > 1.0:
+    #     clean_norm_np /= max_val
+    #     noisy_norm_np /= max_val
+    #     enhanced_norm_np /= max_val
     
     # Zero-mean normalization
-    clean_norm_np = clean_norm_np - np.mean(clean_norm_np)
+    
     enhanced_norm_np = enhanced_norm_np - np.mean(enhanced_norm_np)
     noisy_norm_np = noisy_norm_np - np.mean(noisy_norm_np)
     
     # Align the signals using cross correlation
-    clean_norm_np, noisy_norm_np, enhanced_norm_np = align_signals(clean_norm_np, noisy_norm_np, enhanced_norm_np)
+    if config.compute_intrusive_metrics:
+        clean_norm_np, noisy_norm_np, enhanced_norm_np = align_signals(clean_norm_np, noisy_norm_np, enhanced_norm_np)
     
+
     # # Match length
     # min_len = min(len(clean_np), len(enhanced_np), len(noisy_np))
     # clean_eval = clean_np[:min_len]
@@ -310,37 +319,44 @@ def evaluate_file(f_name, clean_np, enhanced_np, noisy_np, noisy_torch, enhanced
     
     
     # Compute scores
-    scores_noisy = compute_squim(noisy_torch, squim_evaluator)
-    scores_enhanced = compute_squim(enhanced_torch, squim_evaluator)
+    
    
     res = {"file": f_name}
-    res["stoi_en"] = stoi(clean_norm_np, enhanced_norm_np, target_sr, extended=True)
-    print(f"STOI en {res['stoi_en']}")
-    res["stoi_no"] = stoi(clean_norm_np, noisy_norm_np, target_sr, extended=True)
-    res["sdr_en"] = 10 * np.log10(np.sum(clean_norm_np**2) / (np.sum((clean_norm_np - enhanced_norm_np)**2) + 1e-8))
-    res["sdr_no"] = 10 * np.log10(np.sum(clean_norm_np**2) / (np.sum((clean_norm_np - noisy_norm_np)**2) + 1e-8))
-    res["si-sdr-en"] = compute_si_sdr(clean_norm_np, enhanced_norm_np)
-    print(f"Si SDR en {res['si-sdr-en']}")
-    res["si-sdr-no"] = compute_si_sdr(clean_norm_np, noisy_norm_np)
     
-    res["squim-stoi-no"] = scores_noisy["stoi"]
-    res["squim-pesq-no"] = scores_noisy["pesq"]
-    res["squim-si-sdr-no"] = scores_noisy["si_sdr"]
-    #res["squim-mos-no"] = scores_noisy["mos"]
+    if config.compute_intrusive_metrics:
+        res["stoi_en"] = stoi(clean_norm_np, enhanced_norm_np, target_sr, extended=True)
+        print(f"STOI en {res['stoi_en']}")
+        res["stoi_no"] = stoi(clean_norm_np, noisy_norm_np, target_sr, extended=True)
+        res["sdr_en"] = 10 * np.log10(np.sum(clean_norm_np**2) / (np.sum((clean_norm_np - enhanced_norm_np)**2) + 1e-8))
+        res["sdr_no"] = 10 * np.log10(np.sum(clean_norm_np**2) / (np.sum((clean_norm_np - noisy_norm_np)**2) + 1e-8))
+        res["si-sdr-en"] = compute_si_sdr(clean_norm_np, enhanced_norm_np)
+        print(f"Si SDR en {res['si-sdr-en']}")
+        res["si-sdr-no"] = compute_si_sdr(clean_norm_np, noisy_norm_np)
+        
+        try:
+            res["pesq_en"] = pesq(target_sr, clean_norm_np, enhanced_norm_np, 'wb')
+            print(res["pesq_en"] )
+            res["pesq_no"] = pesq(target_sr, clean_norm_np, noisy_norm_np , 'wb')
+        except:
+            print("Warning: PESQ failed")
+            res["pesq_en"] = None
+            res["pesq_no"] = None
     
-    res["squim-stoi-en"] = scores_enhanced["stoi"]
-    res["squim-pesq-en"] = scores_enhanced["pesq"]
-    res["squim-si-sdr-en"] = scores_enhanced["si_sdr"]
+    
+    if config.compute_non_intrusive_metrics:
+        scores_noisy = compute_squim(noisy_torch, squim_evaluator)
+        scores_enhanced = compute_squim(enhanced_torch, squim_evaluator)
+        res["squim-stoi-no"] = scores_noisy["stoi"]
+        res["squim-pesq-no"] = scores_noisy["pesq"]
+        res["squim-si-sdr-no"] = scores_noisy["si_sdr"]
+        #res["squim-mos-no"] = scores_noisy["mos"]
+        
+        res["squim-stoi-en"] = scores_enhanced["stoi"]
+        res["squim-pesq-en"] = scores_enhanced["pesq"]
+        res["squim-si-sdr-en"] = scores_enhanced["si_sdr"]
     #res["squim-mos-en"] = scores_enhanced["mos"]
     
-    try:
-        res["pesq_en"] = pesq(target_sr, clean_norm_np, enhanced_norm_np, 'wb')
-        print(res["pesq_en"] )
-        res["pesq_no"] = pesq(target_sr, clean_norm_np, noisy_norm_np , 'wb')
-    except:
-        print("Warning: PESQ failed")
-        res["pesq_en"] = None
-        res["pesq_no"] = None
+    
     
     results.append(res)
 
@@ -354,35 +370,36 @@ def print_and_save_evaluation_results(results):
     print("\n" + "=" * 50)
     print(f"{'Metric':<10} {'Enhanced':<15} {'Noisy':<15}")
     print("=" * 50)
-
-    print(f"{'STOI':<10} "
-        f"{df['stoi_en'].mean():<15.4f} "
-        f"{df['stoi_no'].mean():<15.4f}")
-
-    print(f"{'SDR (dB)':<10} "
-        f"{df['sdr_en'].mean():<15.2f}"
-        f"{df['sdr_no'].mean():<15.2f}")
-
-    print(f"{'SI-SDR(dB)':<10} "
-        f"{df['si-sdr-en'].mean():<15.2f}"
-        f"{df['si-sdr-no'].mean():<15.2f}")
-
-    print(f"{'PESQ':<10} "
-        f"{df['pesq_en'].mean():<15.4f} "
-        f"{df['pesq_no'].mean():<15.4f}")
     
+    if config.compute_intrusive_metrics:    
+        print(f"{'STOI':<10} "
+            f"{df['stoi_en'].mean():<15.4f} "
+            f"{df['stoi_no'].mean():<15.4f}")
+
+        print(f"{'SDR (dB)':<10} "
+            f"{df['sdr_en'].mean():<15.2f}"
+            f"{df['sdr_no'].mean():<15.2f}")
+
+        print(f"{'SI-SDR(dB)':<10} "
+            f"{df['si-sdr-en'].mean():<15.2f}"
+            f"{df['si-sdr-no'].mean():<15.2f}")
+
+        print(f"{'PESQ':<10} "
+            f"{df['pesq_en'].mean():<15.4f} "
+            f"{df['pesq_no'].mean():<15.4f}")
     
-    print(f"{'Squim STOI':<10} "
-        f"{df['squim-stoi-en'].mean():<15.4f} "
-        f"{df['squim-stoi-no'].mean():<15.4f}")
-    
-    print(f"{'Squim PESQ':<10} "
-        f"{df['squim-pesq-en'].mean():<15.4f} "
-        f"{df['squim-pesq-no'].mean():<15.4f}")
-    
-    print(f"{'Squim SI-SDR':<10} "
-        f"{df['squim-si-sdr-en'].mean():<15.4f} "
-        f"{df['squim-si-sdr-no'].mean():<15.4f}")
+    if config.compute_non_intrusive_metrics:
+        print(f"{'Squim STOI':<10} "
+            f"{df['squim-stoi-en'].mean():<15.4f} "
+            f"{df['squim-stoi-no'].mean():<15.4f}")
+        
+        print(f"{'Squim PESQ':<10} "
+            f"{df['squim-pesq-en'].mean():<15.4f} "
+            f"{df['squim-pesq-no'].mean():<15.4f}")
+        
+        print(f"{'Squim SI-SDR':<10} "
+            f"{df['squim-si-sdr-en'].mean():<15.4f} "
+            f"{df['squim-si-sdr-no'].mean():<15.4f}")
 
     print("=" * 50)
 
@@ -451,30 +468,44 @@ def normalize_loudness(audio, meter, target_sr, target_lufs):
     
     return gain_factor * audio
 
+def normalize_rms(audio, target_rms, eps = 1e-8):
+    current_rms = np.sqrt(np.mean(audio**2) + eps)
+    
+    scaling_factor = target_rms / (current_rms + eps)
+    
+    normalized_audio = audio * scaling_factor
+    
+    return normalized_audio
+
 
 if __name__ == "__main__":
     
     # Directory where the model is saved
-    MODEL_WEIGHTS = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/TESTING/NO_OVERLAP/best_model_5.pth"
-    
+    #MODEL_WEIGHTS = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/TESTING/DNS/best-model-DNS.pth"
+    MODEL_WEIGHTS = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/TESTING/DNS/best-model-DNS.pth"
     if not os.path.exists(MODEL_WEIGHTS):
         raise Exception("Directory for Model Weights does not exist")
     
     # Directory for noisy files
-    INPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_sequential/SNR_-5"
-    #INPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_sequential/output/snr_-5/no_overlap/analysis/sample_1/noisy"
-   
+    #INPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_sequential/SNR_-5"
+    #INPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_sequential/output/snr_-5/overlap/analysis/long_clip"
+    #INPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/dynamic_shield/25cm/for_appendix"
+    INPUT_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/RESAMPLED/testset_new_real_recs/phase_error"
     # Directory for saving enhanced files
-    OUTPUT_ENHANCED =  "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_sequential/output/snr_-5/no_overlap/"
-    
+    # OUTPUT_ENHANCED =  "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_sequential/output/snr_-5/overlap/analysis/long_clip/enhanced"
+    #OUTPUT_ENHANCED = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/dynamic_shield/25cm/for_appendix/enhanced_overlap"
+    OUTPUT_ENHANCED = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/RESAMPLED/testset_new_real_recs/phase_error/enhanced_DNS"
     # PATH FOR SAVING NOISY FILES AFTER lOUDNESS NORMALIZATION 
-    NOISY_NORMALIZED = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_sequential/output/snr_-5/normalized_noisy"
-     
+    #NOISY_NORMALIZED = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_sequential/output/snr_-5/normalized_noisy"
+    #NOISY_NORMALIZED = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_sequential/output/snr_-5/overlap/analysis/long_clip/noisy_normalized"
+    #NOISY_NORMALIZED = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/dynamic_shield/25cm/for_appendix/noisy_normalized"
+    NOISY_NORMALIZED = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/RESAMPLED/testset_new_real_recs/phase_error/noisy_normalized"
     config = Config()
     
-    if config.compute_metrics:
+    if config.compute_intrusive_metrics:
         # Path where the clean speech files are saved (necessary to compute intrusive metrics)
         CLEAN_DIR = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/test_sets/wind_plus_valentini_sequential/speech_norm/SNR_-5"
+    if config.compute_intrusive_metrics or config.compute_non_intrusive_metrics:      
         eval_results = []
         squim_evaluator = SquimEvaluator()
         # hp_filter = signal.butter(4, 200, btype='highpass', fs = config.target_sr, output='sos')
@@ -518,36 +549,50 @@ if __name__ == "__main__":
             
             enhanced_np = enhanced_torch.squeeze(0).cpu().numpy()
             
-            if (config.compute_metrics):
-                clean_wav_path = os.path.join(CLEAN_DIR, file_name)
+            if (config.compute_intrusive_metrics or config.compute_non_intrusive_metrics):
+                if (config.compute_intrusive_metrics):
+                    clean_wav_path = os.path.join(CLEAN_DIR, file_name)
                 
-                clean_np, _ = load_audio(clean_wav_path, config.target_sr)
+                    clean_np, _ = load_audio(clean_wav_path, config.target_sr)
                 
-                print("REFERENCE SPEECH PATH: "+clean_wav_path)
+                    print("REFERENCE SPEECH PATH: "+clean_wav_path)
                 
-                evaluate_file(
-                    f_name=file_name,
-                    clean_np=clean_np,
-                    enhanced_np=enhanced_np,
-                    noisy_np=noisy_np,
-                    noisy_torch=noisy_torch,
-                    enhanced_torch=enhanced_torch,
-                    squim_evaluator=squim_evaluator,
-                    loud_meter=loud_meter,
-                    results=eval_results,
-                    target_sr=config.target_sr
-                )
+                    evaluate_file(
+                        f_name=file_name,
+                        enhanced_np=enhanced_np,
+                        noisy_np=noisy_np,
+                        noisy_torch=noisy_torch,
+                        enhanced_torch=enhanced_torch,
+                        squim_evaluator=squim_evaluator,
+                        results=eval_results,
+                        target_sr=config.target_sr,
+                        clean_np=clean_np,
+                    )
+                else:
+                    evaluate_file(
+                        f_name=file_name,
+                        enhanced_np=enhanced_np,
+                        noisy_np=noisy_np,
+                        noisy_torch=noisy_torch,
+                        enhanced_torch=enhanced_torch,
+                        squim_evaluator=squim_evaluator,
+                        results=eval_results,
+                        target_sr=config.target_sr,
+                        clean_np=0,
+                    )
+               
+            enhanced_np = normalize_rms(enhanced_np, target_rms=0.1) # target_rms = 0.1 corresponds to -20 dBFS
+            noisy_np = normalize_rms(noisy_np, 0.1) 
                 
-                
-            enhanced_np = normalize_loudness(enhanced_np, loud_meter, config.target_sr, config.target_lufs)
-            noisy_np =  normalize_loudness(noisy_np, loud_meter, config.target_sr, config.target_lufs)
+            #enhanced_np = normalize_loudness(enhanced_np, loud_meter, config.target_sr, config.target_lufs)
+            #noisy_np =  normalize_loudness(noisy_np, loud_meter, config.target_sr, config.target_lufs)
             
             sf.write(output_enhanced_path, enhanced_np, config.target_sr)
             sf.write(noisy_normalized_path, noisy_np, config.target_sr)
             
         print("\nAll files processed successfully!")  
             
-        if (config.compute_metrics):   
+        if (config.compute_intrusive_metrics or config.compute_non_intrusive_metrics):   
             print_and_save_evaluation_results(eval_results)
             
         
