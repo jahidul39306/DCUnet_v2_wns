@@ -23,10 +23,8 @@ class SquimEvaluator:
 
         self.sample_rate = self.obj_bundle.sample_rate
 
-    def _prepare_audio(self, waveform):
-        """
-        Ensure waveform shape is [1, T] and on correct device.
-        """
+    def prepare_audio(self, waveform):
+
         if waveform.dim() == 1:
             waveform = waveform.unsqueeze(0)
 
@@ -37,7 +35,7 @@ class SquimEvaluator:
     @torch.no_grad()
     def evaluate(self, enhanced_waveform):
 
-        enhanced_waveform = self._prepare_audio(enhanced_waveform)
+        enhanced_waveform = self.prepare_audio(enhanced_waveform)
 
         # Objective metrics
         stoi, pesq, si_sdr = self.obj_model(enhanced_waveform)
