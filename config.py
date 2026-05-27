@@ -7,8 +7,6 @@ class Config:
 
     compute_intrusive_metrics: bool = False
     
-    compute_non_intrusive_metrics: bool = True
-    
-    output_csv: str | None = None
+    compute_non_intrusive_metrics: bool = False
 
     target_lufs: float = -23.0

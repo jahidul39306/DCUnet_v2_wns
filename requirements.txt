@@ -4,3 +4,8 @@ tqdm # Progress bar for training
 matplotlib # spectrogram drawing
 numpy # mathematical operations
 soundfile # reading writing audio files
+librosa==0.11.0
+scipy==1.15.3
+pandas==2.3.3. # saving to CSV
+pesq
+pystoi
