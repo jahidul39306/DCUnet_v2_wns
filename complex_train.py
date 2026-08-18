@@ -14,14 +14,16 @@ from complex_data_prep import get_dataloaders
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 SAVE_DIR = "./complex_checkpoints"
 
-DATA_BASE = "C:/Users/zikan/Uni/erasmus2026/PBLproject/RECORDINGS/RESAMPLED/segmented"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+DATA_BASE = os.path.join(BASE_DIR, "dataset")
 CLEAN_DIR = os.path.join(DATA_BASE, "clean")
 NOISY_DIR = os.path.join(DATA_BASE, "noisy")
 
-BATCH_SIZE = 8
-NUM_EPOCHS = 120 
-# LEARNING_RATE = 2e-4
-LEARNING_RATE = 5e-5 # Lowered for final precision fine-tuning
+BATCH_SIZE = 16
+NUM_EPOCHS = 300 
+LEARNING_RATE = 0.0001
+# LEARNING_RATE = 5e-5 # Lowered for final precision fine-tuning
 # loss function from the original paper
 class wSDRLoss(nn.Module):
     def __init__(self, n_fft=512, hop_length=256):
@@ -29,12 +31,11 @@ class wSDRLoss(nn.Module):
         self.istft = torchaudio.transforms.InverseSpectrogram(
             n_fft=n_fft, hop_length=hop_length, normalized=True
         )
+        self.istft.to(DEVICE)
     # when call criterion(a,b,c,d,e,f) it will call this function
 
     # this recieve 6 tensors the real imag part of the mix, clean and predicted spectrograms
-    def forward(self, noisy_real, noisy_imag, clean_real, clean_imag, pred_real, pred_imag):
-        self.istft = self.istft.to(noisy_real.device)
-        
+    def forward(self, noisy_real, noisy_imag, clean_real, clean_imag, pred_real, pred_imag):    
         noisy_complex = torch.complex(noisy_real, noisy_imag) 
         clean_complex = torch.complex(clean_real, clean_imag) 
         pred_complex = torch.complex(pred_real, pred_imag) 
@@ -73,9 +74,9 @@ class wSDRLoss(nn.Module):
         loss = - (alpha * s_target + (1 - alpha) * n_target)
         
         # FINAL SHIELD: Filter out any NaNs that managed to break through
-        loss = loss[~torch.isnan(loss)]
+        loss = torch.nan_to_num(loss, nan=0.0)
         if loss.numel() == 0:
-            return torch.tensor(0.0, device=noisy_real.device, requires_grad=True)
+            return None
             
         return torch.mean(loss)
 
@@ -96,7 +97,7 @@ def train_one_epoch(model, dataloader, optimizer, criterion, epoch):
         loss = criterion(mix_real, mix_imag, clean_real, clean_imag, pred_clean_real, pred_clean_imag)
         
         # If loss is still NaN, skip this batch entirely
-        if torch.isnan(loss) or loss.item() == 0:
+        if loss is None:
             continue
             
         optimizer.zero_grad() # clean the gradient from the previous iteration
@@ -122,15 +123,18 @@ def validate_one_epoch(model, dataloader, criterion):
             pred_clean_real = mask_real * mix_real - mask_imag * mix_imag
             pred_clean_imag = mask_real * mix_imag + mask_imag * mix_real
             loss = criterion(mix_real, mix_imag, clean_real, clean_imag, pred_clean_real, pred_clean_imag)
+            
+            if loss is None: 
+                continue
             running_loss += loss.item()
-    return running_loss / len(dataloader)
+            
+    return running_loss / (len(dataloader) + 1e-8)
 
-def save_checkpoint(model, optimizer, scheduler, epoch, best_val_loss, filename):
+def save_checkpoint(model, optimizer, epoch, best_val_loss, filename):
     checkpoint = {
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
-        'scheduler_state_dict': scheduler.state_dict(),
         'best_val_loss': best_val_loss
     }
     torch.save(checkpoint, filename)
@@ -139,6 +143,7 @@ def main():
     print(f"TRAINING: Using full dataset from: {DATA_BASE}")
     os.makedirs(SAVE_DIR, exist_ok=True)
     start_epoch = 0
+    best_val_loss = float('inf')
     checkpoint_path = None
     if os.path.exists(SAVE_DIR):
         # 1. Check for the absolute latest (safest for Slurm timeouts)
@@ -155,16 +160,14 @@ def main():
     model = DeepComplexUNet(n_channels=1).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     criterion = wSDRLoss()
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3, factor=0.5)
-    # reduce lerning rate when validation loss stop improve ; verbose  = true make it print when it reduce; its not working in the pytourch version 
+    
 
     if checkpoint_path:
         print(f"Resuming from checkpoint: {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path, map_location=DEVICE)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        if 'scheduler_state_dict' in checkpoint:
-            scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+
         start_epoch = checkpoint['epoch'] + 1
         best_val_loss = checkpoint.get('best_val_loss', float('inf'))
         
@@ -178,10 +181,10 @@ def main():
         with open(log_file, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["Epoch", "Train_wSDR_Loss", "Val_wSDR_Loss"])
+    
     for epoch in range(start_epoch, NUM_EPOCHS):
-        print(start_epoch)
         current_lr = optimizer.param_groups[0]['lr']
-        print(f"\n[Epoch {epoch+1}/120] Current Learning Rate: {current_lr:.2e}")
+        print(f"\n[Epoch {epoch+1}/{NUM_EPOCHS}] Current Learning Rate: {current_lr:.2e}")
         print(f"Train batches: {len(train_loader)} | Val batches: {len(val_loader)}")
         avg_loss = train_one_epoch(model, train_loader, optimizer, criterion, epoch)
         val_loss = validate_one_epoch(model, val_loader, criterion)
@@ -189,15 +192,16 @@ def main():
         with open(log_file, "a", newline="") as f:
             writer = csv.writer(f)
             writer.writerow([epoch + 1, avg_loss, val_loss])
-        scheduler.step(val_loss)
+        
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            best_path = os.path.join(SAVE_DIR, "best_model.pth")
+            save_checkpoint(model, optimizer, epoch, best_val_loss, best_path)
+            print(f"New best model saved with val_loss: {best_val_loss:.4f}")
+            
         # 1. Save "latest" for every single epoch (Safety snapshot)
         latest_save_path = os.path.join(SAVE_DIR, "latest_checkpoint.pth")
-        save_checkpoint(model, optimizer, scheduler, epoch, val_loss, latest_save_path)
-        # 2. Save archival checkpoints every 10 epochs (History)
-        if (epoch + 1) % 10 == 0:
-            archive_path = os.path.join(SAVE_DIR, f"dcunet_epoch_{epoch+1}.pth")
-            save_checkpoint(model, optimizer, scheduler, epoch, val_loss, archive_path)
-            print(f"Archive checkpoint saved: {archive_path}")
-
+        save_checkpoint(model, optimizer, epoch, val_loss, latest_save_path)
+        
 if __name__ == "__main__":
     main()
