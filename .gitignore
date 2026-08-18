@@ -6,5 +6,6 @@ test_audio/
 unet-old/
 deep-Unet/
 dataset/
+.vscode
 my_job.out
 my_job.err
